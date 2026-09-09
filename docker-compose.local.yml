@@ -1,0 +1,35 @@
+# 本地全栈（SQLite）：不启 Redis / Postgres / Nginx / RSSHub / Xray。
+#
+#   cp .env.example .env          # 若还没有
+#   docker compose -f docker-compose.local.yml up -d --build
+#   打开 http://localhost:3000
+#
+# 登录：任意手机号 → 验证码直接显示在登录页（Mock 短信）。
+# 数据：SQLite 落在 Docker volume beacon-sqlite。
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    image: beacon-local:latest
+    restart: unless-stopped
+    ports:
+      - '${BEACON_WEB_BIND:-127.0.0.1}:${BEACON_WEB_PORT:-3000}:3000'
+    environment:
+      DATABASE_URL: file:/app/data/beacon.db
+      NODE_ENV: development
+      BEACON_ENV: dev
+      # 进程内队列，不需要 Redis
+      # BEACON_QUEUE 留空即可
+      BEACON_PUBLIC_URL: http://localhost:3000
+      BEACON_SITE_URL: http://localhost:3000
+    volumes:
+      - beacon-sqlite:/app/data
+    # 可选：挂载源码做热更新（默认用镜像内代码，构建后一致）
+    # - ./app:/app/app
+    # - ./components:/app/components
+    # - ./lib:/app/lib
+
+volumes:
+  beacon-sqlite:

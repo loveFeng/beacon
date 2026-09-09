@@ -8,6 +8,7 @@ out
 .env
 .env.local
 .env.production
+.env.private
 docker-compose.override.yml
 prisma/dev.db*
 next-env.d.ts
