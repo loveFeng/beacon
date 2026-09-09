@@ -12,6 +12,9 @@ README.md
 # 注意：不能忽略 scripts —— build 脚本会调 tsx scripts/pack-extension.ts 打包插件 zip。
 # 只忽略明确不需要进构建上下文的脚本（shell 运维脚本）。
 scripts/*.sh
+# 本地 Docker 入口必须进构建上下文（上面的 scripts/*.sh 会把它挡掉）
+!scripts/docker-local-entrypoint.sh
+!scripts/docker-private-db-init.sh
 .next-verify
 # 整机版分发包：是构建产物的副本，带完整 ts 源码，会与主工程类型冲突
 public/downloads/beacon-appliance-*

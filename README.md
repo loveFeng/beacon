@@ -33,6 +33,7 @@
   <a href="#适合谁用">适合谁用</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#生产部署">生产部署</a> ·
+  <a href="docs/本地Docker部署.md">本地 Docker</a> ·
   <a href="#技术栈">技术栈</a> ·
   <a href="#许可证">许可证</a>
 </p>
@@ -240,6 +241,8 @@ npm run dev
 ```
 
 打开 [http://localhost:3000](http://localhost:3000)。开发模式下所有外部依赖都用 Mock 替代——**不需要任何 API Key、不需要 Redis、不需要 PostgreSQL**，开箱即用。
+
+想用 **Docker 本地跑**（SQLite 开发态，或私有化 + 自建 Postgres、直连 HTTP、无 Nginx/HTTPS/xray）见：[docs/本地Docker部署.md](docs/本地Docker部署.md)。
 
 ## 生产部署
 
