@@ -35,6 +35,10 @@ public/downloads/appliance.manifest.json
 deploy/xray-bin
 deploy/xray-config.json
 
+# ── 本地私有化 Docker 数据目录（docker-compose.private.yml 绑定挂载）──
+/data/private/postgres/
+/data/private/redis/
+
 # ── 部署配置（含服务器 IP / SSH 密钥路径）──
 deploy.config.json
 

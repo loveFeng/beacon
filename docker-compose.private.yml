@@ -18,7 +18,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必须设置 POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-beacon}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # 数据落仓库旁本地目录（不进 git，见 .gitignore），方便备份/清空
+      - ./data/private/postgres:/var/lib/postgresql/data
       - ./deploy/private-local/init-postgres.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
       # 仅本机调试（psql / GUI）；应用走 compose 内网服务名 postgres
@@ -36,7 +37,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?必须设置 REDIS_PASSWORD}
     command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD}']
     volumes:
-      - redisdata:/data
+      - ./data/private/redis:/data
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG']
       interval: 5s
@@ -103,7 +104,3 @@ services:
     restart: unless-stopped
     environment:
       PORT: '6688'
-
-volumes:
-  pgdata:
-  redisdata:
