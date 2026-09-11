@@ -164,9 +164,17 @@ curl -s http://127.0.0.1:3000/api/health
 |---|---|
 | `docker-compose.private.yml` | 编排（无 proxy / xray / certbot） |
 | `.env.private.example` | 环境模板（复制为 `.env.private`，已 gitignore） |
+| `data/private/` | Postgres / Redis 本地数据目录（绑定挂载，gitignore） |
 | `deploy/private-local/init-postgres.sql` | 空库首次：`vector` 扩展 + `beacon` schema |
 | `scripts/docker-private-db-init.sh` | 建表 + SQL 增量 + 系统数据 |
 | `Dockerfile` | 与生产相同的 Postgres Prisma 镜像（`beacon-web:latest`） |
+
+数据目录（相对仓库根）：
+
+| 本机路径 | 容器内 |
+|---|---|
+| `data/private/postgres` | `/var/lib/postgresql/data` |
+| `data/private/redis` | `/data` |
 
 ### 常用命令
 
@@ -174,11 +182,12 @@ curl -s http://127.0.0.1:3000/api/health
 # 日志
 docker compose --env-file .env.private -f docker-compose.private.yml logs -f web worker
 
-# 停服务（保留数据 volume）
+# 停服务（保留 data/private/ 里的数据）
 docker compose --env-file .env.private -f docker-compose.private.yml down
 
 # 停并清空库 / Redis（不可恢复）
-docker compose --env-file .env.private -f docker-compose.private.yml down -v
+docker compose --env-file .env.private -f docker-compose.private.yml down
+rm -rf data/private/postgres data/private/redis
 ```
 
 本机用 GUI / `psql` 连库（密码见 `.env.private`）：
@@ -207,7 +216,7 @@ docker compose --env-file .env.private -f docker-compose.private.yml run --rm db
 |---|---|---|---|
 | 反代 | 无 | 无 | Nginx 80/443 |
 | HTTPS | 无 | 无 | 需要证书 |
-| 数据库 | SQLite volume | 编排内 Postgres | 外部托管（如火山 Supabase） |
+| 数据库 | SQLite volume | 本机目录 `data/private/postgres` | 外部托管（如火山 Supabase） |
 | 队列 | 进程内 | Redis + Worker | Redis + Worker |
 | 登录 | Mock 短信 | 装机密码 / OA | 真实短信等 |
 | xray | 无 | 无 | 有（可选 YouTube） |
@@ -234,4 +243,4 @@ docker compose up -d --build
 | 提示未配置装机口令 | 在 `.env.private` 加 `BEACON_SETUP_TOKEN`（`openssl rand -hex 32`），再 `up -d --force-recreate web worker` |
 | `db-init` 非 0 退出 | `logs db-init`；常见是 Postgres 未就绪或密码与 `DATABASE_URL` 不一致 |
 | 健康检查只有 `status:ok` | 生产健康详情可能需 `BEACON_HEALTH_TOKEN`；本机有 web 响应即可 |
-| 想清空私有化库重来 | `down -v` 后再 `up -d --build`（会重新跑 init SQL + db-init） |
+| 想清空私有化库重来 | `down` 后删 `data/private/postgres` 与 `data/private/redis`，再 `up -d --build` |
