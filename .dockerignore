@@ -7,6 +7,8 @@ prisma/dev.db*
 .env
 .env.local
 npm-debug.log*
+# 本地 Docker 绑定挂载的数据目录（postgres 容器写入，宿主无读权限会阻断构建上下文）
+data/
 docs
 README.md
 # 注意：不能忽略 scripts —— build 脚本会调 tsx scripts/pack-extension.ts 打包插件 zip。
