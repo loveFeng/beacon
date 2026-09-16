@@ -233,6 +233,44 @@ docker compose up -d --build
 
 ---
 
+## 升级（私有化本地栈）
+
+拉到新代码后，重建镜像 + 跑增量迁移 + 重启。数据保留在 `data/private/`，不会丢。
+
+```bash
+# 1. 拉新代码
+git pull --rebase
+
+# 2. 停服务（数据保留）
+docker compose --env-file .env.private -f docker-compose.private.yml down
+
+# 3. 重建镜像（新代码 + 新 prisma schema / SQL 进镜像）
+docker compose --env-file .env.private -f docker-compose.private.yml build web
+
+# 4. 启动（db-init 会自动跑新增的 prisma/postgres/*.sql，幂等）
+docker compose --env-file .env.private -f docker-compose.private.yml up -d
+
+# 5. 验证
+docker compose --env-file .env.private -f docker-compose.private.yml ps
+curl -s http://127.0.0.1:3000/api/health
+```
+
+`db-init` 是幂等的：已应用过的 SQL 不会重复执行（`IF NOT EXISTS` / `DROP POLICY IF EXISTS`），`sync-system-data` 也按自然键增量。升级后看一眼 `db-init` 日志确认新迁移都跑了：
+
+```bash
+docker compose --env-file .env.private -f docker-compose.private.yml logs db-init | grep '→'
+```
+
+### 想完全重来（清空数据）
+
+```bash
+docker compose --env-file .env.private -f docker-compose.private.yml down
+rm -rf data/private/postgres data/private/redis
+docker compose --env-file .env.private -f docker-compose.private.yml up -d --build
+```
+
+---
+
 ## 排障速查
 
 | 现象 | 处理 |
@@ -244,3 +282,4 @@ docker compose up -d --build
 | `db-init` 非 0 退出 | `logs db-init`；常见是 Postgres 未就绪或密码与 `DATABASE_URL` 不一致 |
 | 健康检查只有 `status:ok` | 生产健康详情可能需 `BEACON_HEALTH_TOKEN`；本机有 web 响应即可 |
 | 想清空私有化库重来 | `down` 后删 `data/private/postgres` 与 `data/private/redis`，再 `up -d --build` |
+| 构建报 `data/private/postgres: permission denied` | 已在 `.dockerignore` 排除 `data/`；若仍报，检查是否被覆盖 |
