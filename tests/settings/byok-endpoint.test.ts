@@ -34,6 +34,7 @@ function add(over: Partial<{ vendor: string; baseUrl: string }> = {}) {
 
 describe('F12-1 · 白名单内端点放行', () => {
   for (const [key, v] of Object.entries(LLM_VENDORS)) {
+    if (v.customEndpoint) continue; // 自定义渠道无预置端点，单独测
     it(`${key} 官方端点通过`, () => {
       expect(checkVendorEndpoint(key, v.baseUrl)).toEqual({ ok: true, vendor: v });
     });
@@ -89,8 +90,8 @@ describe('F12-1 · 绕过尝试必须全部拒绝', () => {
     });
   }
 
-  it('拒绝白名单外的 vendor（custom 入口已删除，服务端也不认）', () => {
-    for (const v of ['custom', 'ollama', '', '__proto__', 'constructor', 'toString']) {
+  it('拒绝白名单外的 vendor（服务端不认）', () => {
+    for (const v of ['ollama', '', '__proto__', 'constructor', 'toString']) {
       expect(checkVendorEndpoint(v, DS).ok).toBe(false);
     }
   });
@@ -115,7 +116,6 @@ describe('F12-1 · actAddProvider 服务端强校验（绕过 UI 直打 server a
       const r = await add({ baseUrl: url });
       expect(r.ok, `本该被拒: ${url}`).toBe(false);
     }
-    await add({ vendor: 'custom' });
     expect(await prisma.modelProvider.count()).toBe(0);
   });
 
@@ -131,6 +131,49 @@ describe('F12-1 · actAddProvider 服务端强校验（绕过 UI 直打 server a
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/端点不在白名单内/);
     expect(r.error).toContain('https://api.deepseek.com');
+  });
+});
+
+describe('F12-1 · 自定义端点渠道（custom vendor）', () => {
+  it('custom + 合法 https 端点放行，存归一后的值', () => {
+    const r = checkVendorEndpoint('custom', 'https://my-relay.example.com/v1/');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.vendor.baseUrl).toBe('https://my-relay.example.com/v1');
+      expect(r.vendor.region).toBe('cn');
+    }
+  });
+
+  it('custom 端到端入库：存用户填的端点，region=cn', async () => {
+    const r = await actAddProvider({
+      label: '自建中转',
+      vendor: 'custom',
+      baseUrl: 'https://my-relay.example.com/v1',
+      apiKey: 'sk-test',
+      model: 'qwen-plus',
+    });
+    expect(r.ok).toBe(true);
+    const p = await prisma.modelProvider.findFirst({ where: { tenantId: session.tenantId } });
+    expect(p?.baseUrl).toBe('https://my-relay.example.com/v1');
+    expect(p?.region).toBe('cn');
+    expect(p?.vendor).toBe('custom');
+  });
+
+  it('custom 仍拒绝形状不合法的端点（http/userinfo/query/file）', () => {
+    for (const url of [
+      'http://my-relay.example.com',
+      'https://user:pass@my-relay.example.com/v1',
+      'https://my-relay.example.com/v1?x=1',
+      'file:///etc/passwd',
+    ]) {
+      expect(checkVendorEndpoint('custom', url).ok, url).toBe(false);
+    }
+  });
+
+  it('custom 端点末尾斜杠归一', () => {
+    const r = checkVendorEndpoint('custom', 'https://my-relay.example.com/v1/');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.vendor.baseUrl).toBe('https://my-relay.example.com/v1');
   });
 });
 

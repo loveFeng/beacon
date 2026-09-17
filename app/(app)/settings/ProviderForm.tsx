@@ -17,8 +17,10 @@ export function ProviderForm() {
   const [label, setLabel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(LLM_VENDORS.deepseek.model);
+  const [baseUrlInput, setBaseUrlInput] = useState('');
 
   const preset = LLM_VENDORS[vendor];
+  const isCustom = vendor === 'custom';
 
   function pickVendor(v: string) {
     setVendor(v);
@@ -29,7 +31,7 @@ export function ProviderForm() {
     setMsg('');
     setFailed(false);
     start(async () => {
-      const r = await actAddProvider({ label: label || preset.name, vendor, baseUrl: preset.baseUrl, apiKey, model });
+      const r = await actAddProvider({ label: label || preset.name, vendor, baseUrl: isCustom ? baseUrlInput : preset.baseUrl, apiKey, model });
       if (r.ok) {
         setMsg(isEn ? 'Channel added, please click "Test Connection" to verify' : '已添加渠道，请点「连通性测试」验证');
         setLabel('');
@@ -65,21 +67,39 @@ export function ProviderForm() {
       </div>
 
       <div className="field">
-        <label className="field-label">{isEn ? 'API Endpoint base_url (Locked by Platform · Cannot Modify)' : 'API 端点 base_url（平台锁定·不可改）'}</label>
-        <input className="input mono" value={preset.baseUrl} readOnly disabled />
-        <div className="small" style={{ color: 'var(--muted)', marginTop: 4 }}>
-          {isEn ? 'Endpoints are preset according to vendor whitelist. Custom endpoints are prohibited to prevent unverified routing.' : '端点由平台按供应商白名单预置，不开放自定义端点——防止流量被转去来路不明的中转服务'}
-        </div>
+        <label className="field-label">{isEn ? 'API Endpoint base_url' : 'API 端点 base_url'}</label>
+        {isCustom ? (
+          <>
+            <input
+              className="input mono"
+              value={baseUrlInput}
+              onChange={(e) => setBaseUrlInput(e.target.value)}
+              placeholder="https://your-endpoint.example.com/v1"
+            />
+            <div className="small" style={{ color: 'var(--muted)', marginTop: 4 }}>
+              {isEn
+                ? 'Custom OpenAI-compatible endpoint (private/local self-hosted, ICP-registered relay). Must be https; userinfo/query strings are rejected.'
+                : '自定义 OpenAI 兼容端点（私有化/本地自建、已备案中转）。必须 https；拒绝带用户名密码或查询串的地址。'}
+            </div>
+          </>
+        ) : (
+          <>
+            <input className="input mono" value={preset.baseUrl} readOnly disabled />
+            <div className="small" style={{ color: 'var(--muted)', marginTop: 4 }}>
+              {isEn ? 'Endpoints are preset according to vendor whitelist. Use "Custom" vendor to enter your own.' : '端点由平台按供应商白名单预置；要填自己的端点请选「自定义」供应商。'}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid grid-2" style={{ gap: 12 }}>
         <div className="field">
           <label className="field-label">{isEn ? 'Model Name (Enter Endpoint ID for Doubao)' : '模型名（豆包填接入点 ID）'}</label>
-          <input className="input mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" />
+          <input className="input mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder={isCustom ? (isEn ? 'e.g. gpt-4o-mini / qwen-plus' : '如 gpt-4o-mini / qwen-plus') : 'deepseek-chat'} />
         </div>
         <div className="field">
-          <label className="field-label">{isEn ? 'Compliance Region (Follows Vendor · Read Only)' : '合规区域（随供应商，不可选）'}</label>
-          <input className="input" value={isOverseas ? (isEn ? 'Overseas (Enterprise Edition only)' : '海外（限企业版·出海场景）') : (isEn ? 'Mainland Compliant' : '国内已备案')} readOnly disabled />
+          <label className="field-label">{isEn ? 'Compliance Region' : '合规区域'}</label>
+          <input className="input" value={isOverseas ? (isEn ? 'Overseas (Enterprise Edition only)' : '海外（限企业版·出海场景）') : (isEn ? 'Mainland ICP Registered' : '国内已备案')} readOnly disabled />
         </div>
       </div>
 
@@ -97,7 +117,7 @@ export function ProviderForm() {
       )}
 
       <div className="row" style={{ gap: 10 }}>
-        <button type="submit" className="btn btn-primary btn-sm" disabled={pending || !apiKey}>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={pending || !apiKey || (isCustom && !baseUrlInput.trim())}>
           {pending ? (isEn ? 'Adding…' : '添加中…') : (isEn ? 'Add Channel' : '添加渠道')}
         </button>
         {msg && <span className="small" style={{ color: failed ? 'var(--red)' : 'var(--green)' }}>{msg}</span>}
