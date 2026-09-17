@@ -273,9 +273,13 @@ export type LlmRegion = 'cn' | 'overseas';
 export type LlmVendor = {
   key: string;
   name: string;
-  baseUrl: string; // 平台预置端点，唯一允许值
+  baseUrl: string; // 平台预置端点，唯一允许值（customEndpoint=true 时为空，由用户填）
   model: string; // 默认模型名（模型名白名单是 F12-1 验收④，尚未实现）
   region: LlmRegion; // 由供应商强绑，不由用户自选
+  /** 自定义端点：允许用户填任意 https 端点（私有化/本地自建、OpenAI 兼容中转）。
+   *  仍过 canonicalEndpoint 形状校验（https、无 userinfo、无 query/hash），挡 SSRF 与 userinfo 陷阱。
+   *  region 固定 cn（国内已备案口径）——要出海请用海外白名单供应商。 */
+  customEndpoint?: boolean;
 };
 
 export const LLM_VENDORS: Record<string, LlmVendor> = {
@@ -302,6 +306,11 @@ export const LLM_VENDORS: Record<string, LlmVendor> = {
   perplexity: { key: 'perplexity', name: 'Perplexity AI 联网检索', baseUrl: 'https://api.perplexity.ai', model: 'sonar-pro', region: 'overseas' },
   together: { key: 'together', name: 'Together AI 云算力托管', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', region: 'overseas' },
   deepinfra: { key: 'deepinfra', name: 'DeepInfra 高性能开源模型', baseUrl: 'https://api.deepinfra.com/v1/openai', model: 'Qwen/Qwen2.5-72B-Instruct', region: 'overseas' },
+
+  // 🛠 自定义 OpenAI 兼容端点（私有化/本地自建、已备案中转）。
+  //   base_url 由用户填；仍过形状校验（https、无 userinfo、无 query/hash）挡 SSRF。
+  //   region 固定 cn（国内已备案）——海外请走上面的海外白名单供应商。
+  custom: { key: 'custom', name: '自定义 OpenAI 兼容端点', baseUrl: '', model: '', region: 'cn', customEndpoint: true },
 };
 
 // 下拉顺序：国内已备案在前，海外在后
@@ -340,12 +349,22 @@ export type EndpointCheck = { ok: true; vendor: LlmVendor } | { ok: false; error
 
 // 校验「vendor + baseUrl」是否命中白名单。校验通过后**一律用 vendor.baseUrl 入库**，
 // 不存用户提交的字符串——库里永远不该出现用户可控的端点。
+// 例外：customEndpoint=true 的供应商（custom）允许用户填任意 https 端点，
+// 此时存 canonicalEndpoint 归一后的值（仍挡 userinfo/query/hash/http 等形状攻击）。
 export function checkVendorEndpoint(vendorKey: string, baseUrl: string): EndpointCheck {
   const v = llmVendor(vendorKey);
   if (!v) {
     return { ok: false, error: '该供应商不在白名单内。平台只支持从白名单中选择供应商，不开放自定义端点（PRD §10.5 L3）' };
   }
   const got = canonicalEndpoint(baseUrl);
+  if (v.customEndpoint) {
+    // 自定义端点：只过形状校验（https、无 userinfo、无 query/hash），不与预置值比对。
+    if (got === null) {
+      return { ok: false, error: '端点不合法：必须是 https:// 开头、不含用户名密码或查询串的 URL（PRD §6 F12-1）' };
+    }
+    return { ok: true, vendor: { ...v, baseUrl: got } };
+  }
+  // 固定供应商：形状不合法或与预置值不符，统一报「白名单」口径（与历史测试一致）。
   const want = canonicalEndpoint(v.baseUrl);
   if (got === null || want === null || got !== want) {
     return { ok: false, error: `端点不在白名单内：${v.name} 的 base_url 由平台锁定为 ${v.baseUrl}，不可修改（PRD §6 F12-1）` };
