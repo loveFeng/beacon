@@ -122,10 +122,13 @@ export async function actSetRouting(fn: string, providerId: string) {
   const providers = await prisma.modelProvider.findMany({ where: { tenantId: s.tenantId } });
   const target = providerId ? providers.find((p) => p.id === providerId) : null;
   if (providerId && !target) return { ok: false, error: '渠道不存在' };
-  // 图像/视频只能走火山方舟：读侧（image.ts:resolveImageProvider / gateway.ts:resolveVideoProvider）
-  // 只在 vendor='doubao' 里挑，指到别家等于指了个不会被采纳的值——与其静默无效，不如当场说清楚。
-  if (target && (fn === 'image' || fn === 'video') && target.vendor !== 'doubao') {
-    return { ok: false, error: `${fn === 'image' ? '封面生图' : '视频理解'}只能用「火山引擎 豆包」渠道` };
+  // 图像/视频读侧只在 doubao 里挑；但 image 额外放行 custom（自定义 OpenAI 兼容端点，
+  // 例如经 CLI Proxy 跑 Nano Banana 2）。video 仍只认方舟（视频理解走方舟专属端点）。
+  if (target && fn === 'video' && target.vendor !== 'doubao') {
+    return { ok: false, error: '视频理解只能用「火山引擎 豆包」渠道' };
+  }
+  if (target && fn === 'image' && target.vendor !== 'doubao' && target.vendor !== 'custom') {
+    return { ok: false, error: '封面生图只能用「火山引擎 豆包」或「自定义 OpenAI 兼容端点」渠道' };
   }
 
   await Promise.all(

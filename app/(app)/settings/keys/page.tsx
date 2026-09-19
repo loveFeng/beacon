@@ -62,7 +62,7 @@ const FN_META: Record<LlmFunction, { name: string; nameEn: string; tier: string;
   chat: { name: 'AI 助手对话', nameEn: 'AI Assistant Chat', tier: '中档模型', tierEn: 'Mid-Tier Model', desc: '交互式问答；执行模式不单独配的话也走这条', descEn: 'Interactive Q&A; execution mode defaults to this if unassigned', overridable: true },
   diagnosis: { name: '算法教练诊断/优化', nameEn: 'Algorithm Coach Diagnosis', tier: '中档模型', tierEn: 'Mid-Tier Model', desc: '创作工坊实时诊断的 LLM 优化与教练点评', descEn: 'Real-time studio diagnostics & coach reviews', overridable: true },
   video: { name: '视频理解', nameEn: 'Video Understanding', tier: '仅火山方舟', tierEn: 'Volcengine Ark Only', desc: '视频拆解只走你自己的豆包渠道（平台不垫付：一次视频抵几十次文本）', descEn: 'Video breakdown uses your Doubao channel (platform does not advance costs)', overridable: true },
-  image: { name: '封面生图', nameEn: 'Cover Image Gen', tier: '火山方舟即梦', tierEn: 'Volcengine Jimeng', desc: 'AI 封面与正文配图走即梦，自动复用你的任一豆包渠道的 Key，无需单独配置', descEn: 'AI covers and post images use Jimeng, auto-reusing any Doubao channel key', overridable: true },
+  image: { name: '封面生图', nameEn: 'Cover Image Gen', tier: '即梦 / 自定义端点', tierEn: 'Jimeng / Custom Endpoint', desc: '默认走即梦（自动复用你的任一豆包渠道 Key）；也可指到一条 custom 渠道，走你的 OpenAI 兼容生图代理（如 Nano Banana 2）', descEn: 'Defaults to Jimeng (auto-reuses any Doubao channel key); or route to a custom channel via your OpenAI-compatible image proxy (e.g. Nano Banana 2)', overridable: true },
   agent: { name: '执行模式（任务台派活）', nameEn: 'Agent Mode (Task Dispatch)', tier: '会用工具的模型', tierEn: 'Tool-Use Model', desc: '不配就跟随「AI 助手对话」。派活时它要连续调用工具，模型对 function calling 的支持越稳越好', descEn: 'Defaults to AI Assistant Chat. Requires solid function calling support for sequential tool use', overridable: true },
 };
 

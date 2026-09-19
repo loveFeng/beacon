@@ -81,6 +81,8 @@ type ImageProvider = {
   apiKey: string;
   model: string;
   source: QuotaSource;
+  /** 这条 provider 的 vendor：决定 llmImage 按哪种形状构造请求（方舟带 watermark/参考图，custom 走纯 OpenAI images 形状） */
+  vendor: string;
   /** 走 ChatGPT 订阅渠道生图时带上那一行（baseUrl/apiKey 此时为空，见 resolveImageProvider ①b） */
   chatgpt?: ChatgptChannelRow;
 };
@@ -111,14 +113,17 @@ export function openaiImageSize(size: string): '1024x1024' | '1536x1024' | '1024
  */
 async function resolveImageProvider(tenantId: string | null): Promise<ImageProvider | null> {
   if (tenantId) {
+    // image 读侧认 doubao + custom：doubao 走方舟 /images/generations（带 watermark），
+    // custom 走自定义 OpenAI 兼容端点（例如经 CLI Proxy 跑 Nano Banana 2，无服务端水印，
+    // 隐式 AIGC 标识照常在 lib/cover/run.ts 注入，与 ChatGPT 订阅渠道同口径）。
     const providers = await prisma.modelProvider.findMany({
-      where: { tenantId, vendor: 'doubao', status: { not: 'failed' } },
+      where: { tenantId, vendor: { in: ['doubao', 'custom'] }, status: { not: 'failed' } },
     });
-    // ① 显式路由到 image 的渠道：用它自己的 model
+    // ① 显式路由到 image 的渠道（doubao 或 custom）：用它的 model
     for (const p of providers) {
       const routing = parseJson<Record<string, string>>(p.routing, {});
       if (routing.image === p.id) {
-        return { baseUrl: p.baseUrl, apiKey: decryptKey(p.apiKeyEnc), model: p.model, source: 'byok' };
+        return { baseUrl: p.baseUrl, apiKey: decryptKey(p.apiKeyEnc), model: p.model, source: 'byok', vendor: p.vendor };
       }
     }
     // ①b ChatGPT 订阅渠道**显式**指到 image（2026-09-15，只在整机版/私有化）：走 Responses 的 image_generation 工具。
@@ -127,13 +132,15 @@ async function resolveImageProvider(tenantId: string | null): Promise<ImageProvi
     if (can('chatgptSubscription')) {
       const gpt = await getChatgptChannel(tenantId);
       if (gpt && gpt.status !== 'failed' && parseJson<Record<string, string>>(gpt.routing, {}).image === gpt.id) {
-        return { baseUrl: '', apiKey: '', model: gpt.model, source: 'byok', chatgpt: gpt };
+        return { baseUrl: '', apiKey: '', model: gpt.model, source: 'byok', vendor: 'chatgpt', chatgpt: gpt };
       }
     }
-    // ② 任意豆包渠道：复用 base+key，模型强制默认即梦（该渠道的 model 多半是文本/视频模型，不能拿来生图）
-    const any = providers.find((p) => p.isDefault) ?? providers[0];
+    // ② 任意豆包渠道：复用 base+key，模型强制默认即梦（该渠道的 model 多半是文本/视频模型，不能拿来生图）。
+    //    只兜底 doubao——custom 渠道没有「默认图模型」概念，不显式路由就不假设它能生图。
+    const doubaoProviders = providers.filter((p) => p.vendor === 'doubao');
+    const any = doubaoProviders.find((p) => p.isDefault) ?? doubaoProviders[0];
     if (any) {
-      return { baseUrl: any.baseUrl, apiKey: decryptKey(any.apiKeyEnc), model: DEFAULT_IMAGE_MODEL, source: 'byok' };
+      return { baseUrl: any.baseUrl, apiKey: decryptKey(any.apiKeyEnc), model: DEFAULT_IMAGE_MODEL, source: 'byok', vendor: 'doubao' };
     }
   }
 
@@ -154,7 +161,7 @@ async function resolveImageProvider(tenantId: string | null): Promise<ImageProvi
       // 显式指到 image 的用它自己的 model（用户特意填的即梦版本）；顺带命中的默认渠道
       // 一律用默认即梦模型（那条渠道的 model 多半是文本模型）。与租户侧同口径。
       const model = routing.image === p.id ? p.model : DEFAULT_IMAGE_MODEL;
-      return { baseUrl: p.baseUrl, apiKey: decryptKey(p.apiKeyEnc), model, source: 'platform' };
+      return { baseUrl: p.baseUrl, apiKey: decryptKey(p.apiKeyEnc), model, source: 'platform', vendor: p.vendor };
     }
   }
 
@@ -164,7 +171,7 @@ async function resolveImageProvider(tenantId: string | null): Promise<ImageProvi
   const key = process.env.BEACON_IMAGE_LLM_API_KEY || process.env.BEACON_DEFAULT_LLM_API_KEY;
   // 企业版里这把 Key 写在客户自己的 .env 里、烧的是客户自己的钱，标成 byok 才不会被送进
   // 平台预算闸（与 lib/llm/gateway.ts 的 env 分支同口径）。
-  if (model && key) return { baseUrl: base, apiKey: key, model, source: can('platformLlmChannel') ? 'platform' : 'byok' };
+  if (model && key) return { baseUrl: base, apiKey: key, model, source: can('platformLlmChannel') ? 'platform' : 'byok', vendor: 'doubao' };
   return null;
 }
 
@@ -250,7 +257,7 @@ export async function llmImage(
     return {
       ok: false,
       reason: 'not_configured',
-      error: `封面生成要用火山方舟（豆包）渠道：到「接入与密钥」加一个「火山引擎 豆包」渠道即可（平台若已在运维台配了生图渠道，也会自动用上）。${IMAGE_MODEL_HINT}`,
+      error: `封面生成要用火山方舟（豆包）或「自定义 OpenAI 兼容端点」渠道：到「接入与密钥」加一个「火山引擎 豆包」渠道（最省事，复用方舟 Key 即可），或加一个 custom 渠道指向你的 OpenAI 兼容生图代理（平台若已在运维台配了生图渠道，也会自动用上）。${IMAGE_MODEL_HINT}`,
     };
   }
 
@@ -315,13 +322,19 @@ export async function llmImage(
       prompt: req.prompt,
       size: req.size,
       response_format: 'b64_json',
-      watermark: true,
     };
-    // 参考图：单张传字符串，多张传数组（方舟两种都接受）。data:URI 内联，不外链——
-    // 与截图/视频同一个理由：不为了让模型能取而先把用户的人像照挂到公网上。
-    if (req.referenceImages?.length) {
-      body.image = req.referenceImages.length === 1 ? req.referenceImages[0] : req.referenceImages;
+    if (provider.vendor === 'doubao') {
+      // 方舟专属：服务端强制显式 AI 水印（《标识办法》第四条）+ 参考图（图生图「主体保真」）。
+      body.watermark = true;
+      // 参考图：单张传字符串，多张传数组（方舟两种都接受）。data:URI 内联，不外链——
+      // 与截图/视频同一个理由：不为了让模型能取而先把用户的人像照挂到公网上。
+      if (req.referenceImages?.length) {
+        body.image = req.referenceImages.length === 1 ? req.referenceImages[0] : req.referenceImages;
+      }
     }
+    // custom（自定义 OpenAI 兼容端点）：走纯 OpenAI /images/generations 形状，
+    // 不带 watermark（端点不一定支持，且无服务端强制显式标识——隐式标识在 lib/cover/run.ts 注入，
+    // 与 ChatGPT 订阅渠道同口径），也不带方舟专属的 image 参考图字段。
 
     const timeoutMs = opts?.timeoutMs ?? IMAGE_TIMEOUT_MS;
     const res = await fetch(generationsUrl(provider.baseUrl), {
@@ -334,7 +347,12 @@ export async function llmImage(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       await giveBack(); // 调用失败不占名额（同 llmVideo/llmVision 口径）
-      return { ok: false, reason: 'failed', error: explainArkError(res.status, detail, provider.model, req.size) };
+      // 方舟的报错有专属翻译（模型未开通/尺寸不支持等）；custom 端点的报错形状各异，直接回原文更准。
+      const error =
+        provider.vendor === 'doubao'
+          ? explainArkError(res.status, detail, provider.model, req.size)
+          : `生图请求失败 ${res.status}: ${detail.slice(0, 180)}`;
+      return { ok: false, reason: 'failed', error };
     }
 
     const data = (await res.json()) as { data?: { url?: string; b64_json?: string }[] };

@@ -26,7 +26,11 @@ export function FunctionRouting({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState('');
-  const options = doubaoOnly ? providers.filter((p) => p.vendor === 'doubao') : providers;
+  // 图像/视频读侧只在 doubao 里挑；但 image 额外放行 custom（自定义 OpenAI 兼容端点，
+  // 例如经 CLI Proxy 跑 Nano Banana 2）。video 仍只认方舟（视频理解走方舟专属端点）。
+  const options = doubaoOnly
+    ? providers.filter((p) => p.vendor === 'doubao' || (fn === 'image' && p.vendor === 'custom'))
+    : providers;
 
   function set(value: string) {
     setErr('');
@@ -40,7 +44,11 @@ export function FunctionRouting({
   if (options.length === 0) {
     return (
       <span className="small muted">
-        {doubaoOnly ? (isEn ? 'Requires a "Volcengine Doubao" channel' : '需要一条「火山引擎 豆包」渠道') : (isEn ? 'No channels available' : '还没有可选渠道')}
+        {doubaoOnly
+          ? fn === 'image'
+            ? (isEn ? 'Requires a "Volcengine Doubao" or custom OpenAI-compatible channel' : '需要一条「火山引擎 豆包」或「自定义 OpenAI 兼容端点」渠道')
+            : (isEn ? 'Requires a "Volcengine Doubao" channel' : '需要一条「火山引擎 豆包」渠道')
+          : (isEn ? 'No channels available' : '还没有可选渠道')}
       </span>
     );
   }

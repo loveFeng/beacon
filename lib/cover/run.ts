@@ -140,7 +140,7 @@ export async function runCover(input: CoverRunInput): Promise<CoverRunResult> {
     return {
       ok: false,
       reason: 'not_configured',
-      error: `封面生成要先在「接入与密钥」加一个「火山引擎 豆包」渠道。${IMAGE_MODEL_HINT}`,
+      error: `封面生成要先在「接入与密钥」加一个「火山引擎 豆包」渠道（最省事），或加一个 custom 渠道指向你的 OpenAI 兼容生图代理。${IMAGE_MODEL_HINT}`,
     };
   }
 
