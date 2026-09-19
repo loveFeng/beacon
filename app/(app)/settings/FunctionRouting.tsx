@@ -26,10 +26,15 @@ export function FunctionRouting({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState('');
-  // 图像/视频读侧只在 doubao 里挑；但 image 额外放行 custom（自定义 OpenAI 兼容端点，
-  // 例如经 CLI Proxy 跑 Nano Banana 2）。video 仍只认方舟（视频理解走方舟专属端点）。
+  // 图像/视频读侧原本只在 doubao 里挑；现在 image 放行 custom，video 放行 custom + gemini
+  // （自定义 OpenAI 兼容端点 / Gemini 3.x 也能理解视频，走 image_url 口径，见 videoPartForVendor）。
   const options = doubaoOnly
-    ? providers.filter((p) => p.vendor === 'doubao' || (fn === 'image' && p.vendor === 'custom'))
+    ? providers.filter(
+        (p) =>
+          p.vendor === 'doubao' ||
+          (fn === 'image' && p.vendor === 'custom') ||
+          (fn === 'video' && (p.vendor === 'custom' || p.vendor === 'gemini')),
+      )
     : providers;
 
   function set(value: string) {
@@ -47,7 +52,7 @@ export function FunctionRouting({
         {doubaoOnly
           ? fn === 'image'
             ? (isEn ? 'Requires a "Volcengine Doubao" or custom OpenAI-compatible channel' : '需要一条「火山引擎 豆包」或「自定义 OpenAI 兼容端点」渠道')
-            : (isEn ? 'Requires a "Volcengine Doubao" channel' : '需要一条「火山引擎 豆包」渠道')
+            : (isEn ? 'Requires a "Volcengine Doubao", custom, or Gemini channel' : '需要一条「火山引擎 豆包」/「自定义端点」/「Gemini」渠道')
           : (isEn ? 'No channels available' : '还没有可选渠道')}
       </span>
     );

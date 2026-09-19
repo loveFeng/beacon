@@ -2,7 +2,7 @@ import { prisma } from '../db';
 import { toJson, parseJson } from '../json';
 import { log } from '../logger';
 import { llmVideo, llmVision, llmComplete } from '../llm/gateway';
-import { videoPart, type VideoSource } from '../llm/ark';
+import { type VideoSource } from '../llm/ark';
 import { buildAccountContext } from '../account-context';
 import { platformOfLink } from '../clip/platform';
 import { pruneInspiration } from '../ingest/inspiration';
@@ -450,7 +450,7 @@ async function runChannel(
   if (channel === 'video') {
     return llmVideo(
       tenantId,
-      [system, { role: 'user', content: [videoPart(params.source!, params.fps), { type: 'text', text: facts }] }],
+      { system, source: params.source!, fps: params.fps, facts },
       { json: true, temperature: 0.3 },
     );
   }

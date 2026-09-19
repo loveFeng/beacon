@@ -58,6 +58,24 @@ export function videoPart(source: VideoSource, fps?: number): ContentPart {
   };
 }
 
+/**
+ * 视频源 → 按 vendor 口径的内容片段。
+ *
+ * 方舟（doubao）走它私有的 `video_url`（带 fps 抽帧）；gemini / custom（自定义 OpenAI 兼容端点，
+ * 例如经 CLI Proxy 中转 Gemini 3.x）走 OpenAI 兼容口径的 `image_url`——Gemini 的 OpenAI 兼容层
+ * 把视频当成 `image_url` 传（data:video/* 内联或公网直链均可），不认 `video_url` / `fps`。
+ *
+ * ⚠️ gemini/custom 这条是按 OpenAI 兼容代理的通行约定写的；若你的代理要别的形状（如 file_data /
+ * input_video），这里再加分支。url 传公网地址时由上游服务端去拉，与方舟同思路。
+ */
+export function videoPartForVendor(vendor: string, source: VideoSource, fps?: number): ContentPart {
+  if (vendor === 'doubao') return videoPart(source, fps);
+  return {
+    type: 'image_url',
+    image_url: { url: source.kind === 'url' ? source.url : source.dataUri },
+  };
+}
+
 /** 本地文件 → 内联源。超限/格式不对时返回原因，由调用方原样告诉用户。 */
 export function inlineSource(bytes: Uint8Array, mime: string): { ok: true; source: VideoSource } | { ok: false; error: string } {
   const type = (mime || '').split(';')[0].trim().toLowerCase();

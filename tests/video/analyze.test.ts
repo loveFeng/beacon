@@ -12,7 +12,7 @@ import {
   TEXT_CARRIER_HEADING,
   TRANSCRIPT_SOURCE_PLATFORMS,
 } from '@/lib/video/analyze';
-import { inlineSource, clampFps, videoPart, looksVideoCapable, MAX_INLINE_VIDEO_BYTES } from '@/lib/llm/ark';
+import { inlineSource, clampFps, videoPart, videoPartForVendor, looksVideoCapable, MAX_INLINE_VIDEO_BYTES } from '@/lib/llm/ark';
 import { loadExemplars } from '@/lib/account-context';
 
 // 视频/作品拆解。这套用例里最重要的三条，每一条守的都是一个「错了就看不出来」的失败：
@@ -134,7 +134,7 @@ describe('analyzeVideo · 视频档', () => {
   it('🔒 video 档的 prompt 必须明说「听不到声音」，否则模型会顺着编旁白', async () => {
     const spy = await mockVideo();
     await analyzeVideo({ workspaceId: 'w1', source: FILE });
-    const system = String(spy.mock.calls[0][1][0].content);
+    const system = String(spy.mock.calls[0][1].system.content);
     expect(system).toContain('听不到任何声音');
     expect(system).toContain('不许臆测');
   });
@@ -418,6 +418,21 @@ describe('lib/llm/ark · 输入侧闸门', () => {
   it('videoPart 产出方舟口径的 video_url 片段', () => {
     const p = videoPart({ kind: 'url', url: 'https://x/a.mp4' }, 3);
     expect(p).toEqual({ type: 'video_url', video_url: { url: 'https://x/a.mp4', fps: 3 } });
+  });
+
+  it('videoPartForVendor：doubao 走 video_url（带 fps）', () => {
+    const p = videoPartForVendor('doubao', { kind: 'url', url: 'https://x/a.mp4' }, 2);
+    expect(p).toEqual({ type: 'video_url', video_url: { url: 'https://x/a.mp4', fps: 2 } });
+  });
+
+  it('videoPartForVendor：gemini / custom 走 image_url（不带 fps）', () => {
+    for (const vendor of ['gemini', 'custom'] as const) {
+      const p = videoPartForVendor(vendor, { kind: 'url', url: 'https://x/a.mp4' }, 2);
+      expect(p).toEqual({ type: 'image_url', image_url: { url: 'https://x/a.mp4' } });
+    }
+    // 内联 data:URI 也用 image_url 承载
+    const inline = videoPartForVendor('custom', { kind: 'inline', dataUri: 'data:video/mp4;base64,AAAA', bytes: 4, mime: 'video/mp4' });
+    expect(inline).toEqual({ type: 'image_url', image_url: { url: 'data:video/mp4;base64,AAAA' } });
   });
 
   it('模型能力判断只作提示：纯文本豆包判 false，seed/vision 判 true', () => {

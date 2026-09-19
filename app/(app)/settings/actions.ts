@@ -122,10 +122,10 @@ export async function actSetRouting(fn: string, providerId: string) {
   const providers = await prisma.modelProvider.findMany({ where: { tenantId: s.tenantId } });
   const target = providerId ? providers.find((p) => p.id === providerId) : null;
   if (providerId && !target) return { ok: false, error: '渠道不存在' };
-  // 图像/视频读侧只在 doubao 里挑；但 image 额外放行 custom（自定义 OpenAI 兼容端点，
-  // 例如经 CLI Proxy 跑 Nano Banana 2）。video 仍只认方舟（视频理解走方舟专属端点）。
-  if (target && fn === 'video' && target.vendor !== 'doubao') {
-    return { ok: false, error: '视频理解只能用「火山引擎 豆包」渠道' };
+  // 图像/视频读侧原本只在 doubao 里挑；image 放行 custom，video 放行 custom + gemini
+  // （自定义 OpenAI 兼容端点 / Gemini 3.x 也能理解视频，走 image_url 口径，见 videoPartForVendor）。
+  if (target && fn === 'video' && target.vendor !== 'doubao' && target.vendor !== 'custom' && target.vendor !== 'gemini') {
+    return { ok: false, error: '视频理解只能用「火山引擎 豆包」/「自定义 OpenAI 兼容端点」/「Gemini」渠道' };
   }
   if (target && fn === 'image' && target.vendor !== 'doubao' && target.vendor !== 'custom') {
     return { ok: false, error: '封面生图只能用「火山引擎 豆包」或「自定义 OpenAI 兼容端点」渠道' };

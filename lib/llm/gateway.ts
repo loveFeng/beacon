@@ -13,7 +13,8 @@ import type { ChatMessage, LlmProvider, LlmResult, ToolDef } from './types';
 import { MockProvider } from './mock';
 import { OpenAICompatibleProvider } from './openai-compatible';
 import { CHATGPT_VENDOR, chatgptProviderFromRow, getChatgptChannel } from './chatgpt/channel';
-import { looksVideoCapable, VIDEO_MODEL_HINT } from './ark';
+import { looksVideoCapable, VIDEO_MODEL_HINT, videoPartForVendor } from './ark';
+import type { VideoSource } from './ark';
 // 平台渠道的读侧收在一处（文本与图像共用同一份缓存与选路，见该文件顶部注释）
 import { pickPlatformProvider, invalidatePlatformProviderCache } from './platform-providers';
 import { can } from '../edition';
@@ -122,47 +123,67 @@ export type VideoResult =
   | { ok: false; error: string; reason: 'not_configured' | 'failed' };
 
 /**
- * 找这个租户的方舟渠道。优先级：
- *   ① routing 里显式指到 video 的渠道 —— 用户自己指的，最高优先
+ * 找这个租户的视频理解渠道。优先级：
+ *   ① routing 里显式指到 video 的渠道（doubao / custom / gemini 均可）—— 用户自己指的，最高优先
  *   ② vendor=doubao 且模型名看着支持视频的 —— 「加了豆包渠道」本身就是意图
  *   ③ 任何 vendor=doubao 的渠道 —— 让方舟自己报「这个模型不支持视频」，
  *      那句报错比我们回一句「未配置」有用得多（用户明明配了）
+ *
+ * 【为什么 custom/gemini 不自动挑选】没有可靠的「看着支持视频」启发式（Gemini 模型名里看不出能不能吃视频），
+ * 不显式路由就不假设它能用——免得把一条文本渠道默认拿去喂视频，得到一堆幻觉。
+ * doubao 仍保留自动挑选（looksVideoCapable + 兜底），行为不变。
  */
-async function resolveVideoProvider(tenantId: string | null): Promise<LlmProvider | null> {
+async function resolveVideoProvider(
+  tenantId: string | null,
+): Promise<{ provider: LlmProvider; vendor: string } | null> {
   if (!tenantId) return null;
   const providers = await prisma.modelProvider.findMany({
     where: { tenantId, status: { not: 'failed' } },
   });
-  const ark = providers.filter((p) => p.vendor === 'doubao');
-  if (!ark.length) return null;
+  // video 读侧认 doubao + custom + gemini：doubao 走方舟 video_url，custom/gemini 走 image_url（见 videoPartForVendor）
+  const videoProviders = providers.filter((p) => p.vendor === 'doubao' || p.vendor === 'custom' || p.vendor === 'gemini');
+  if (!videoProviders.length) return null;
 
-  for (const p of ark) {
+  // ① 显式路由到 video 的渠道（任意支持的 vendor）
+  for (const p of videoProviders) {
     const routing = parseJson<Record<string, string>>(p.routing, {});
-    if (routing.video === p.id) return build(p);
+    if (routing.video === p.id) return { provider: build(p), vendor: p.vendor };
   }
-  return build(ark.find((p) => looksVideoCapable(p.model)) ?? ark[0]);
+  // ②/③ 只对 doubao 自动挑选
+  const ark = videoProviders.filter((p) => p.vendor === 'doubao');
+  if (!ark.length) return null;
+  return { provider: build(ark.find((p) => looksVideoCapable(p.model)) ?? ark[0]), vendor: 'doubao' };
 }
 
 /**
  * 视频理解调用。产物是要写进库、要给用户当结论看的，所以口径与 llmVision 一致：
  * **绝不降级到 Mock**。没配渠道或调用失败，一律如实返回失败，由调用方告诉用户怎么办。
+ *
+ * 视频内容块按 provider 的 vendor 构造：方舟走 video_url（带 fps 抽帧），gemini/custom 走
+ * image_url（Gemini OpenAI 兼容口径，不带 fps）——见 lib/llm/ark.ts 的 videoPartForVendor。
  */
 export async function llmVideo(
   tenantId: string | null,
-  messages: ChatMessage[],
+  input: { system: ChatMessage; source: VideoSource; fps?: number; facts: string },
   opts?: { temperature?: number; json?: boolean; timeoutMs?: number },
 ): Promise<VideoResult> {
   assertNotDemo(tenantId);
-  const provider = await resolveVideoProvider(tenantId);
-  if (!provider) {
+  const resolved = await resolveVideoProvider(tenantId);
+  if (!resolved) {
     return {
       ok: false,
       reason: 'not_configured',
-      error: `视频分析要用你自己的火山方舟 API Key。到「接入与密钥」加一个「火山引擎 豆包」渠道即可。${VIDEO_MODEL_HINT}`,
+      error: `视频分析要用你自己的火山方舟 API Key，或一条 custom / gemini 渠道（如经代理跑 Gemini 3.x）。到「接入与密钥」加一个「火山引擎 豆包」渠道（最省事），或加一个 custom / gemini 渠道并把「视频理解」指到它。${VIDEO_MODEL_HINT}`,
     };
   }
+  const { provider, vendor } = resolved;
   await assertLlmQuota(tenantId, 'byok'); // 用户自付 token 费，配额只作防跑飞护栏
   try {
+    const part = videoPartForVendor(vendor, input.source, input.fps);
+    const messages: ChatMessage[] = [
+      input.system,
+      { role: 'user', content: [part, { type: 'text', text: input.facts }] },
+    ];
     // 视频推理是分钟级的，30s 默认预算必然超时——这里给 5 分钟。
     const result = await provider.complete(messages, { ...opts, timeoutMs: opts?.timeoutMs ?? VIDEO_TIMEOUT_MS });
     await recordUsage(tenantId, 'video', result, 'byok');

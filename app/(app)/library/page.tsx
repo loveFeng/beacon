@@ -19,7 +19,7 @@ export default async function LibraryPage() {
       take: 200,
     }),
     prisma.modelProvider.count({
-      where: { tenantId: s.tenantId, vendor: 'doubao', status: { not: 'failed' } },
+      where: { tenantId: s.tenantId, vendor: { in: ['doubao', 'custom', 'gemini'] }, status: { not: 'failed' } },
     }),
   ]);
 
