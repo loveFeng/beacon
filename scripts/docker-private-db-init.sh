@@ -14,7 +14,10 @@ if [ ! -f "$SCHEMA" ]; then
 fi
 
 echo "[private-db-init] 1/3 prisma db push…"
-npx prisma db push --schema "$SCHEMA" --skip-generate
+# --accept-data-loss：新 schema 偶尔会给已有表加唯一约束/改列可空性，Prisma 会先弹「可能丢数据」的
+# 警告并拒跑。本地私有化库由我们自己的 init 脚本管理、可重建，越过该警告；若真有重复行导致
+# 加约束失败，报错会明确指出，届时再人工清理那批行。
+npx prisma db push --schema "$SCHEMA" --skip-generate --accept-data-loss
 
 echo "[private-db-init] 2/3 应用 $SQL_DIR/*.sql…"
 applied=0
