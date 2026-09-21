@@ -70,6 +70,9 @@ export const HOT_SOURCES = [
   { key: 'baidu', name: '百度热搜', beta: false },
   { key: 'toutiao', name: '头条热榜', beta: false },
   { key: 'youtube', name: 'YouTube 热门', beta: true },
+  // AIHOT 是跨平台 AI 资讯热点榜（不是单一平台），与上面平台型热榜并列展示。
+  // 匿名免 key、有 s-maxage=60 的共享缓存，按 HOT_INGEST_INTERVAL_MINUTES 节奏轮询即可。
+  { key: 'aihot', name: 'AI 热点榜', beta: false },
 ] as const;
 
 // 榜单源的品牌名（去掉「热榜/热搜/热门」后缀）。

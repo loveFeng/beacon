@@ -5,6 +5,7 @@ import { DailyHotAdapter } from './dailyhot';
 import { Hot60sAdapter } from './hot60s';
 import { BaiduHotAdapter } from './baidu';
 import { YouTubeHotAdapter } from './youtube-hot';
+import { AiHotAdapter } from './aihot';
 import { MockHotAdapter, MockCompetitorAdapter } from './mock';
 import { PLUGIN_COLLECTABLE } from '../ingest/competitor';
 import { realCompetitorAdapter } from './competitor-real';
@@ -23,9 +24,22 @@ function hot60sEnabled(): boolean {
   return isProd() ? process.env.BEACON_HOT60S !== '0' : process.env.BEACON_HOT60S === '1';
 }
 
+// AIHOT 通道开关。口径与 60s 完全一致（见上方 hot60sEnabled 注释）：
+//   · 生产态默认接真（免 key 拿真实 AI 热点榜），显式 BEACON_AIHOT='0' 才关。
+//   · 非生产态默认离线走 Mock，显式 BEACON_AIHOT='1' 才联网。
+//   · BEACON_AIHOT_DISABLED='1' 任何环境都强制关。
+function aiHotEnabled(): boolean {
+  if (process.env.BEACON_AIHOT_DISABLED === '1') return false;
+  return isProd() ? process.env.BEACON_AIHOT !== '0' : process.env.BEACON_AIHOT === '1';
+}
+
 function hotAdapters(): HotListAdapter[] {
   const list: HotListAdapter[] = [];
   list.push(new BaiduHotAdapter()); // 百度专用（只覆盖 baidu，其余源自动跳过）：60s/DailyHot 都拿不到百度
+  // AIHOT 专用（只覆盖 aihot）：跨平台 AI 资讯热点榜，60s/DailyHot 不覆盖这个源
+  if (aiHotEnabled()) {
+    list.push(new AiHotAdapter(process.env.BEACON_AIHOT_BASE_URL?.trim() || undefined));
+  }
   // YouTube 官方 API（只覆盖 youtube）：配了 key 才启用，经 BEACON_HTTP_PROXY(xray) 出海翻墙。
   // 拿不到（节点挂/无 key）→ 逐源回退 Mock，youtube 卡片如实标示例，不影响其他源。
   const ytKey = process.env.BEACON_YOUTUBE_API_KEY?.trim();

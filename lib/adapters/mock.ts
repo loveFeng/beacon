@@ -12,6 +12,8 @@ const HOT_SAMPLES: Record<string, string[]> = {
   xiaohongshu: ['素人也能爆的笔记选题', '封面决定 80% 点击', '小红书搜索流量玩法', '起号第一周做什么', '如何找到对标账号'],
   youtube: ['How creators plan content', 'The 3-second hook rule', 'Small channel growth tips', 'Thumbnail A/B testing', 'Retention curve explained'],
   x: ['The creator economy in 2026', 'Why niche beats broad', 'Thread writing formula', 'Growth without ads', 'Algorithm signals decoded'],
+  // AIHOT 是跨平台 AI 资讯聚合榜，样本沿用其 AI 资讯调性
+  aihot: ['新模型在公开评测中超越 GPT-5', '开源 7B 模型逼近闭源旗舰', 'AI Agent 沙箱逃逸引发安全讨论', '大模型定价再降 80%', '多模态模型原生支持长视频理解'],
 };
 
 function seededMetric(seed: string, base: number, spread: number): number {

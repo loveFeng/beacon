@@ -66,6 +66,7 @@ export const intelDict = {
       baidu: '百度热搜',
       kuaishou: '快手热榜',
       tieba: '贴吧热议',
+      aihot: 'AI 热点榜',
     },
   },
   en: {
@@ -132,6 +133,7 @@ export const intelDict = {
       baidu: 'Baidu Hot Search',
       kuaishou: 'Kuaishou Hotlist',
       tieba: 'Tieba Hot Topics',
+      aihot: 'AI Hot Topics',
     },
   },
 } as const;
