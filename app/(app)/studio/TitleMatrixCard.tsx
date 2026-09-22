@@ -72,8 +72,8 @@ export function TitleMatrixCard({
       const r = await actAdoptTitle(draftId, title);
       if (r.ok) {
         setAdopted(title);
-        // 采纳的标题 = 封面主文案：顺手填进封面工位，用户不用再复制一遍
-        onUseAsCover?.(title);
+        // 只把草稿标题换成这条，不碰封面工位——「作封面大字」是旁边那个按钮的职责，
+        // 这里顺手填会让用户以为「点标题就跳进了封面生成」。
         router.refresh();
       } else {
         setErr(r.error ?? (lang === 'en' ? 'Adoption failed' : '采纳失败'));
