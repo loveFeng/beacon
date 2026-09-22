@@ -52,7 +52,8 @@ async function main() {
       await prisma.memoryEntry.update({ where: { id }, data: { embedding: JSON.stringify(vec) } });
       if (isPg) {
         await prisma.$executeRawUnsafe(
-          `UPDATE "${pgSchema()}"."MemoryEntry" SET embedding_vec = $1::vector WHERE id = $2`,
+          // public. 限定：Prisma 连接 search_path 只有 beacon，pgvector 装在 public（见 lib/vector/store.ts 同款注释）
+          `UPDATE "${pgSchema()}"."MemoryEntry" SET embedding_vec = $1::public.vector WHERE id = $2`,
           `[${vec.join(',')}]`,
           id,
         );

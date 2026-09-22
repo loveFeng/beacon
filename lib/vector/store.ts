@@ -28,7 +28,13 @@ export async function upsertMemoryEmbedding(memoryId: string, text: string): Pro
   // Postgres：额外写真正的 vector 列供 HNSW 检索
   if (isPostgres()) {
     const lit = `[${vec.join(',')}]`;
-    await prisma.$executeRawUnsafe(`UPDATE ${memoryTable()} SET embedding_vec = $1::vector WHERE id = $2`, lit, memoryId);
+    // `public.` 限定是必须的：Prisma 连接因 ?schema=beacon 把 search_path 收成只有 "beacon"，
+    // 而 pgvector 的 vector 类型装在 public —— 不限定就 42704（type "vector" does not exist）。
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${memoryTable()} SET embedding_vec = $1::public.vector WHERE id = $2`,
+      lit,
+      memoryId,
+    );
   }
 }
 
@@ -89,9 +95,11 @@ export async function searchMemories(
 
   if (isPostgres()) {
     // pgvector 最近邻（<=> 余弦距离）；账号级隔离：本账号记忆 + 工作区级共享记忆(accountId IS NULL)
+    // `public.` 限定类型与操作符：Prisma 连接的 search_path 被 ?schema=beacon 收成只有 "beacon"，
+    // pgvector 的 vector 类型与 <=> 操作符都在 public —— 不限定就 42704 / 42883。
     const lit = `[${qvec.join(',')}]`;
     const rows = await prisma.$queryRawUnsafe<{ id: string; content: string; type: string; dist: number }[]>(
-      `SELECT id, content, type, (embedding_vec <=> $1::vector) AS dist
+      `SELECT id, content, type, (embedding_vec OPERATOR(public.<=>) $1::public.vector) AS dist
        FROM ${memoryTable()}
        WHERE "workspaceId" = $2 AND active = true AND embedding_vec IS NOT NULL
          AND ("accountId" = $4 OR "accountId" IS NULL)
