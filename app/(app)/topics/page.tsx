@@ -121,11 +121,13 @@ function TopicCard({
   t,
   battle,
   votes,
+  draftId,
   lang,
 }: {
   t: TopicRow;
   battle?: BattleCard;
   votes?: VoteSummary;
+  draftId?: string;
   lang: string;
 }) {
   const scores = parseJson<Record<string, number>>(t.scores, {});
@@ -305,6 +307,27 @@ function TopicCard({
           <TopicActions topicId={t.id} title={t.title} />
         </div>
       )}
+
+      {/* 已采纳给「去工坊起稿 / 继续写」入口。
+          刚采纳时 AcceptedBar 浮条会承接一次，但那条一刷新就没了——之后用户回到 accepted 分区
+          再想生成，以前只能手搓 URL。这里补上常驻入口，和 AcceptedBar 里那个 href 同款。 */}
+      {t.state === 'accepted' && (
+        <div style={{ marginTop: 'auto', paddingTop: 14 }}>
+          <div className="divider" />
+          <a
+            href={draftId ? `/studio?draft=${draftId}` : `/studio?topicId=${t.id}`}
+            className="btn btn-sm btn-accent"
+            title={draftId
+              ? (lang === 'en' ? 'Open the existing draft in Studio' : '这条已起过稿，去工坊继续写')
+              : (lang === 'en' ? 'Start a new draft from this topic in Studio' : '带着这条选题去工坊，点「AI 生成初稿」')}
+          >
+            <Icon.sparkles size={14} />
+            {draftId
+              ? (lang === 'en' ? 'Continue in Studio →' : '继续写这篇 →')
+              : (lang === 'en' ? 'Draft in Studio →' : '去工坊起这篇稿 →')}
+          </a>
+        </div>
+      )}
     </Card>
   );
 }
@@ -352,9 +375,25 @@ export default async function TopicsPage({
   // 而对成熟账号那张卡根本不渲染——不该让每个人都先等它）。
   // 剩下三条：成员数谁也不依赖，对标卡与投票都只依赖 shown（上一波就有了），
   // 所以压成「成员数 + 对标卡」一波、投票一波。
-  const [memberCount, battles] = await Promise.all([
+  const [memberCount, battles, draftByTopic] = await Promise.all([
     prisma.member.count({ where: { tenantId: s.tenantId, status: 'active' } }),
     buildBattleCards(s.workspaceId, s.accountId, shown).catch(() => new Map<string, BattleCard>()),
+    // 已采纳分区要给「去工坊起稿 / 继续写」入口，得知道哪条已经起过稿。
+    // 只在 accepted 分区查，别的分区不付这一跳。一条选题可能派生过多篇稿（一稿多平台），
+    // 这里取最新一条的 id 用于「继续写」跳转——其余的在工坊列表里也能看到。
+    active === 'accepted' && shown.length > 0
+      ? prisma.draft
+          .findMany({
+            where: { topicId: { in: shown.map((t) => t.id) }, accountId: s.accountId },
+            select: { id: true, topicId: true, updatedAt: true },
+            orderBy: { updatedAt: 'desc' },
+          })
+          .then((rows) => {
+            const m = new Map<string, string>();
+            for (const r of rows) if (r.topicId && !m.has(r.topicId)) m.set(r.topicId, r.id);
+            return m;
+          })
+      : Promise.resolve(new Map<string, string>()),
   ]);
   const voteByTopic = new Map<string, VoteSummary>();
   if (memberCount > 1 && shown.length > 0) {
@@ -535,7 +574,7 @@ export default async function TopicsPage({
               ) : (
                 <div className="grid grid-2">
                   {list.map((t) => (
-                    <TopicCard key={t.id} t={t} battle={battles.get(t.id)} votes={voteByTopic.get(t.id)} lang={lang} />
+                    <TopicCard key={t.id} t={t} battle={battles.get(t.id)} votes={voteByTopic.get(t.id)} draftId={draftByTopic.get(t.id)} lang={lang} />
                   ))}
                 </div>
               )}
@@ -545,7 +584,7 @@ export default async function TopicsPage({
       ) : (
         <div className="grid grid-2">
           {shown.map((t) => (
-            <TopicCard key={t.id} t={t} battle={battles.get(t.id)} votes={voteByTopic.get(t.id)} lang={lang} />
+            <TopicCard key={t.id} t={t} battle={battles.get(t.id)} votes={voteByTopic.get(t.id)} draftId={draftByTopic.get(t.id)} lang={lang} />
           ))}
         </div>
       )}
